@@ -27,7 +27,8 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
     /// @dev Declare library usage.
     using EnumerableSet for EnumerableSet.UintSet;
 
-    /// @dev Game configs    
+    /// @dev Game configs
+    uint MAX_CHARACTER_ID;   
     uint MAX_HP = 1000;
     uint MAX_ATTACK = 100;
     uint CRITICAL_HIT_BPS = 100; // 10%
@@ -130,6 +131,8 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
             "CriticalHit: unequal character configs."
         );
 
+        MAX_CHARACTER_ID = characterIds.length;
+
         for(uint i = 0; i < characterIds.length; i += 1) {
             attributeConfigs[characterIds[i]] = AttributeConfig({
                 name: characterNames[i],
@@ -211,6 +214,12 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
     /// @dev Lets the caller mint an NFT character.
     function selectCharacter(uint _characterId) external {
 
+        require(_characterId <= MAX_CHARACTER_ID, "CriticalHit: Invalid characterId provided.");
+        require(
+            requestInFlight[_msgSender()] == "",
+            "CriticalHit: wait for in-flight request to complete."
+        );
+
         // Get tokenId for character NFT
         uint reservedTokenId = nextTokenId;
         nextTokenId += 1;
@@ -236,11 +245,15 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
     }
 
     /// @dev Lets a character attack the boss
-    function attackBoss(uint _tokenId) external /** onlyValidCharacter */ {
+    function attackBoss(uint _tokenId) external {
         
         require(
             requestInFlight[_msgSender()] == "",
             "CriticalHit: wait for in-flight request to complete."
+        );
+        require(
+            ownerOf(_tokenId) == _msgSender(),
+            "CriticalHit: must own the character to attack with it."
         );
 
         // Send chainlink random number request for random attributes
@@ -274,6 +287,11 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
         internal 
         override
     {
+        require(
+            requestInFlight[from] == "",
+            "CriticalHit: wait for in-flight request to complete."
+        );
+
         // Update `tokenIdsOfOwned`
         if(from != address(0)) {
             EnumerableSet.remove(tokenIdsOfOwned[from], tokenId);
