@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+// Access control
+import "@openzeppelin/contracts/access/Ownable.sol";
+
 // Token
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
@@ -18,7 +21,7 @@ import { Base64 } from "./libraries/Base64.sol";
  *  - Attack
  */
 
-contract CriticalHit is VRFConsumerBase, ERC721 {
+contract CriticalHit is Ownable, VRFConsumerBase, ERC721 {
 
     /// @dev Declare library usage.
     using EnumerableSet for EnumerableSet.UintSet;
@@ -93,6 +96,7 @@ contract CriticalHit is VRFConsumerBase, ERC721 {
     mapping(uint => CharacterAttributes) public characterAttributes;
 
     /// @dev Events
+    event BossReset(CharacterAttributes boss);
     event CharacterRequested(CharacterRequest request, uint indexed characterId, address indexed requestor);
     event CharacterAssigned(CharacterAttributes charAttributes, uint indexed tokenId, address indexed minter);
     event AttackRequested(AttackRequest attackRequest, uint indexed tokenId, address indexed requestor);
@@ -166,6 +170,31 @@ contract CriticalHit is VRFConsumerBase, ERC721 {
 
         return output;
     }
+
+    /**
+     *  Whitelisted function
+     */
+
+    /// @dev Lets the owner of the contract reset the boss.
+    function resetBoss(string memory _bossName, string memory _bossImageURI) external onlyOwner {
+
+        require(
+            boss.hp == 0,
+            "CriticalHit: Cannot reset boss while boss is still alive."
+        );
+
+        CharacterAttributes memory bossAttributes = CharacterAttributes({
+            name: _bossName,
+            imageURI: _bossImageURI,
+            hp: MAX_HP,
+            attackDamage: MAX_ATTACK
+        });
+
+        boss = bossAttributes;
+
+        emit BossReset(bossAttributes);
+    }
+
     /**
      *  External functions
      */
@@ -225,6 +254,27 @@ contract CriticalHit is VRFConsumerBase, ERC721 {
     /**
      *  Internal functions
      */
+    
+    /// @dev Runs on every transfer, mint, burn.
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) 
+        internal 
+        override
+    {
+        // Update `tokenIdsOfOwned`
+        if(from != address(0)) {
+            EnumerableSet.remove(tokenIdsOfOwned[from], tokenId);
+        }
+
+        if(to != address(0)) {
+            EnumerableSet.add(tokenIdsOfOwned[to], tokenId);
+        }
+
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
 
     /// @dev Requests a random number from Chainlink VRF.
     function randomnNumberRequest() internal returns (bytes32 requestId) {
@@ -303,6 +353,24 @@ contract CriticalHit is VRFConsumerBase, ERC721 {
         characterAttributes[attackRequest.tokenId] = charAttributes;
 
         emit AttackExecuted(charAttributes, bosAttribues, ownerOf(attackRequest.tokenId));
+    }
+
+    /**
+     *  Getter functions
+     */
+    
+    /// @dev Returns the tokenIds owned by an address.
+    function getTokenIdsOwned(address _target) external view returns (uint[] memory tokenIdsOwned) {
+
+        // Get set of tokenIds owned
+        EnumerableSet.UintSet storage idsOwned = tokenIdsOfOwned[_target];
+        uint numOfOwned = EnumerableSet.length(idsOwned);
+        
+        tokenIdsOwned = new uint[](numOfOwned);
+
+        for(uint i = 0; i < numOfOwned; i += 1) {
+            tokenIdsOwned[i] = EnumerableSet.at(idsOwned, i);
+        }
     }
 
     /**
