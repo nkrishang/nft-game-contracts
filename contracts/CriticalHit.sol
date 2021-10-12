@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 // Token
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
 // Chainlink VRF
 import { VRFConsumerBase } from '@chainlink/contracts/src/v0.8/VRFConsumerBase.sol';
@@ -21,7 +22,7 @@ import { Base64 } from "./libraries/Base64.sol";
  *  - Attack
  */
 
-contract CriticalHit is Ownable, VRFConsumerBase, ERC721 {
+contract CriticalHit is Ownable, VRFConsumerBase, ERC721Holder, ERC721 {
 
     /// @dev Declare library usage.
     using EnumerableSet for EnumerableSet.UintSet;
@@ -183,6 +184,13 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721 {
             "CriticalHit: Cannot reset boss while boss is still alive."
         );
 
+        uint id = 0;
+        if(nextTokenId == 0) {
+
+            nextTokenId += 1;
+            _mint(address(this), id);
+        }
+
         CharacterAttributes memory bossAttributes = CharacterAttributes({
             name: _bossName,
             imageURI: _bossImageURI,
@@ -191,6 +199,7 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721 {
         });
 
         boss = bossAttributes;
+        characterAttributes[id] = bossAttributes;
 
         emit BossReset(bossAttributes);
     }
@@ -203,7 +212,8 @@ contract CriticalHit is Ownable, VRFConsumerBase, ERC721 {
     function selectCharacter(uint _characterId) external {
 
         // Get tokenId for character NFT
-        uint reservedTokenId = ++nextTokenId;
+        uint reservedTokenId = nextTokenId;
+        nextTokenId += 1;
 
         // Send chainlink random number request for random attributes
         bytes32 requestId = randomnNumberRequest();
